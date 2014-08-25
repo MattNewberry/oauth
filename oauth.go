@@ -353,11 +353,11 @@ func encodeUserParams(userParams map[string]string) string {
 
 // DEPRECATED: Use Post() instead.
 func (c *Consumer) PostForm(url string, userParams map[string]string, token *AccessToken) (resp *http.Response, err error) {
-	return c.Post(url, userParams, token)
+	return c.Post(url, "", userParams, token)
 }
 
-func (c *Consumer) Post(url string, userParams map[string]string, token *AccessToken) (resp *http.Response, err error) {
-	return c.makeAuthorizedRequest("POST", url, LOC_BODY, "", userParams, token)
+func (c *Consumer) Post(url string, body string, userParams map[string]string, token *AccessToken) (resp *http.Response, err error) {
+	return c.makeAuthorizedRequest("POST", url, LOC_BODY, body, userParams, token)
 }
 
 func (c *Consumer) Delete(url string, userParams map[string]string, token *AccessToken) (resp *http.Response, err error) {
@@ -429,9 +429,13 @@ func (c *Consumer) makeAuthorizedRequest(method string, url string, dataLocation
 	authParams.Add(SIGNATURE_PARAM, c.signer.Sign(base_string, key))
 
 	contentType := ""
-	if dataLocation == LOC_BODY {
+	existing, exists := c.AdditionalHeaders["Content-Type"]
+	if !exists && dataLocation == LOC_BODY {
 		contentType = "application/x-www-form-urlencoded"
+	} else {
+		contentType = existing[0]
 	}
+
 	return c.httpExecute(method, url+queryParams, contentType, body, authParams)
 }
 
@@ -649,6 +653,8 @@ type HTTPExecuteError struct {
 	Status string
 	// StatusCode is the parsed status code.
 	StatusCode int
+	// Header is the response header
+	ResponseHeaders http.Header
 }
 
 // Error provides a printable string description of an HTTPExecuteError.
@@ -657,7 +663,7 @@ func (e HTTPExecuteError) Error() string {
 		"\tResponse Status: '" + e.Status + "'\n" +
 		"\tResponse Code: " + strconv.Itoa(e.StatusCode) + "\n" +
 		"\tResponse Body: " + string(e.ResponseBodyBytes) + "\n" +
-		"\tRequst Headers: " + e.RequestHeaders
+		"\tRequest Headers: " + e.RequestHeaders + "\n"
 }
 
 func (c *Consumer) httpExecute(
@@ -718,6 +724,7 @@ func (c *Consumer) httpExecute(
 			ResponseBodyBytes: bytes,
 			Status:            resp.Status,
 			StatusCode:        resp.StatusCode,
+			ResponseHeaders:   resp.Header,
 		}
 	}
 	return resp, err
